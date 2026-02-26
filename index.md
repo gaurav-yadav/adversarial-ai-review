@@ -4,6 +4,24 @@ _A production system with 22 reviewer–dev agent pairs, adversarial validation,
 
 ---
 
+## Table of Contents
+
+1. [The Problem: Trust Erosion](#1-the-problem-trust-erosion)
+2. [Production Results](#2-production-results)
+3. [Adversarial Validation](#3-the-core-innovation-adversarial-validation)
+4. [Domain Specialization: 22 Agent Pairs](#4-domain-specialization-22-agent-pairs)
+5. [The PR Picture](#5-the-pr-picture-making-it-useful-to-humans)
+6. [Dual Verdict](#6-dual-verdict-when-correct-code-has-the-wrong-foundation)
+7. [The Feedback Loop](#7-the-feedback-loop-preventing-rot)
+8. [Auto-Generating Agents](#8-auto-generating-agents)
+9. [System Architecture](#9-system-architecture)
+10. [Engineering Risks](#10-engineering-risks)
+11. [Limitations and Boundaries](#11-limitations-and-boundaries)
+12. [Comparison to Existing Approaches](#12-comparison-to-existing-approaches)
+13. [Conclusion](#13-conclusion)
+
+---
+
 ## Abstract
 
 Single-pass LLM code review produces high false-positive rates in practice; early studies report substantial noise, and teams often ignore large fractions of alerts (Rasheed et al., 2024). In our own single-pass baseline runs on the same repo, we observed **30–60% invalidation rates** depending on PR size. Developers learn to ignore the output. We built a multi-agent system that treats every reviewer finding as _a hypothesis to be challenged_: specialized reviewer agents propose findings, matched developer agents validate them with a three-way verdict (VALID / INVALID / AMBIGUOUS), and a dual-verdict synthesis separates _"is this the right approach?"_ from _"is this implemented correctly?"_ Across **500+ production PRs** in a 22-service TypeScript/GraphQL monorepo, the system sustains a **~7% false positive rate** — with every invalidation backed by specific technical counter-evidence. This article describes what we built, what the research literature says about why it works, and where it breaks down.
