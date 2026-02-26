@@ -6,7 +6,7 @@ _A production system with 22 reviewer–dev agent pairs, adversarial validation,
 
 ## Abstract
 
-Single-pass LLM code review produces high false-positive rates in practice; early studies report substantial noise, and teams often ignore large fractions of alerts (Rasheed et al., 2024). In our own single-pass baseline runs on the same repo, we observed 30–60% invalidation rates depending on PR size. Developers learn to ignore the output. We built a multi-agent system that treats every reviewer finding as a hypothesis to be challenged: specialized reviewer agents propose findings, matched developer agents validate them with a three-way verdict (VALID / INVALID / AMBIGUOUS), and a dual-verdict synthesis separates "is this the right approach?" from "is this implemented correctly?" Across 500+ production PRs in a 22-service TypeScript/GraphQL monorepo, the system sustains a ~7% false positive rate — with every invalidation backed by specific technical counter-evidence. This article describes what we built, what the research literature says about why it works, and where it breaks down.
+Single-pass LLM code review produces high false-positive rates in practice; early studies report substantial noise, and teams often ignore large fractions of alerts (Rasheed et al., 2024). In our own single-pass baseline runs on the same repo, we observed **30–60% invalidation rates** depending on PR size. Developers learn to ignore the output. We built a multi-agent system that treats every reviewer finding as _a hypothesis to be challenged_: specialized reviewer agents propose findings, matched developer agents validate them with a three-way verdict (VALID / INVALID / AMBIGUOUS), and a dual-verdict synthesis separates _"is this the right approach?"_ from _"is this implemented correctly?"_ Across **500+ production PRs** in a 22-service TypeScript/GraphQL monorepo, the system sustains a **~7% false positive rate** — with every invalidation backed by specific technical counter-evidence. This article describes what we built, what the research literature says about why it works, and where it breaks down.
 
 ---
 
@@ -14,11 +14,11 @@ Single-pass LLM code review produces high false-positive rates in practice; earl
 
 Traditional AI code review follows a single-pass architecture: one model reads a diff, applies heuristics, outputs findings. It's fast. It's also unreliable for anything non-trivial.
 
-The failure isn't about model capability — it's structural. Self-review is unreliable for the kind of hard reasoning code review demands: tracing authorization chains, verifying call site coverage, confirming cross-service contracts. Models frequently rationalize initial conclusions rather than genuinely reconsidering them, particularly on multi-step reasoning (Huang et al., 2023; Kamoi et al., 2024). Self-correction works for formatting and naming; it fails where code review matters most.
+The failure isn't about model capability — **it's structural.** Self-review is unreliable for the kind of hard reasoning code review demands: tracing authorization chains, verifying call site coverage, confirming cross-service contracts. Models frequently _rationalize_ initial conclusions rather than genuinely reconsidering them, particularly on multi-step reasoning (Huang et al., 2023; Kamoi et al., 2024). Self-correction works for formatting and naming; **it fails where code review matters most.**
 
 Here's what that looks like in practice: a reviewer agent analyzes a GraphQL resolver and flags a missing DataLoader — an N+1 vulnerability. It traces the code path, sees a database query inside a resolver, generates the finding. But the query is already wrapped in a batched loader through a parent resolver. The agent misread the call stack. In a single-pass system, that false positive reaches the developer as a confident "BLOCKER."
 
-The consequence is a trust erosion cycle. Developers receive 40+ findings per PR, spend an hour triaging, discover a third are false positives, and start ignoring the system. The tool meant to improve quality becomes noise.
+The consequence is a _trust erosion cycle_. Developers receive 40+ findings per PR, spend an hour triaging, discover a third are false positives, and start ignoring the system. **The tool meant to improve quality becomes noise.**
 
 We built an architecture that breaks this cycle.
 
@@ -26,7 +26,7 @@ We built an architecture that breaks this cycle.
 
 ## 2. Production Results
 
-We've run this system on 500+(approx) production PRs over several months. The aggregate false positive rate holds steady around 7%, compared to 30–60% we observed in our own single-pass baseline runs on the same repo.
+We've run this system on **500+ production PRs** over several months. The aggregate false positive rate holds steady around **7%**, compared to **30–60%** we observed in our own single-pass baseline runs on the same repo.
 
 To show the mechanics behind that number, we pulled detailed breakdowns for 9 consecutive PRs — not cherry-picked, just sequential work over two weeks:
 
@@ -48,15 +48,17 @@ To show the mechanics behind that number, we pulled detailed breakdowns for 9 co
 
 The false positive rate matters less than _how_ each invalidation happened. Every one follows one of three patterns:
 
+---
+
 **Context the reviewer couldn't see.** In PR E, a reviewer correctly flagged a SELECT query with no row-level security context — it could return zero rows. The dev agent traced 7 related files in the same service and found they all manually filter by tenant_id. The database user has BYPASSRLS by design. The pattern looks dangerous; the service context proves it isn't.
 
 **Code the reviewer missed.** In PR D, a reviewer flagged an "unused component." The dev agent found it imported at two call sites in files outside the diff. Classic "search the diff, miss the call site."
 
 **Intentional patterns the reviewer didn't recognize.** Same PR: a reviewer flagged static viewport height as missing resize handling. The dev agent pointed to the existing page component using the identical pattern. Intentional, not an oversight.
 
-On the largest PR (A: 10k+ lines across 183 files), the system maintained 6.5% false positive rate while catching a broken authorization system (checking entity IDs instead of document IDs), data corruption on edit (section references wiped on every save), and an ID confusion that would have corrupted comments in production.
+On the largest PR (A: **10k+ lines across 183 files**), the system maintained **6.5% false positive rate** while catching a _broken authorization system_ (checking entity IDs instead of document IDs), _data corruption on edit_ (section references wiped on every save), and an _ID confusion_ that would have corrupted comments in production.
 
-**What it costs.** 50k–150k tokens per typical PR ($0.50–$3.00); 400k tokens for the 183-file PR depends on AI model and effort. Wall-clock: 2–4 minutes for small PRs, 8–10 minutes with debate. Agent maintenance: ~30 minutes per service per month. For context, a senior engineer doing the same review manually spends 2–3 hours per complex PR. USD costs and token costs are approx average.
+**What it costs.** 50k–150k tokens per typical PR (**$0.50–$3.00**); 400k tokens for the 183-file PR depends on AI model and effort. Wall-clock: **2–4 minutes** for small PRs, 8–10 minutes with debate. Agent maintenance: ~30 minutes per service per month. For context, a senior engineer doing the same review manually spends **2–3 hours** per complex PR. USD costs and token costs are approx average.
 
 **Honest limitations.** The 7% rate is self-reported — dev agents judge reviewer findings, spot-checked by humans. We don't yet have a controlled human-only baseline for the same PRs, or time-to-action measurements. The 9-PR detailed breakdown is from one team, one monorepo, one development style. The 500-PR aggregate is consistent but not independently audited.
 
@@ -64,7 +66,7 @@ On the largest PR (A: 10k+ lines across 183 files), the system maintained 6.5% f
 
 ## 3. The Core Innovation: Adversarial Validation
 
-The system's central idea is simple: treat every reviewer finding as a hypothesis, then try to kill it.
+The system's central idea is simple: **treat every reviewer finding as a hypothesis, then try to kill it.**
 
 ### 3.1 Paired Agents with Opposed Roles
 
@@ -76,17 +78,17 @@ For each finding, the dev agent responds with one of three verdicts:
 **INVALID** — the finding is incorrect, with specific counter-evidence.
 **AMBIGUOUS** — cannot determine without product or feature context.
 
-This isn't self-correction — it's adversarial cross-examination. Research consistently shows that single-agent self-review degrades reasoning on hard tasks (Huang et al., 2023; Kamoi et al., 2024). The system sidesteps that by never asking one agent to both raise and resolve a concern.
+This isn't self-correction — **it's adversarial cross-examination.** Research consistently shows that single-agent self-review degrades reasoning on hard tasks (Huang et al., 2023; Kamoi et al., 2024). The system sidesteps that by _never asking one agent to both raise and resolve a concern._
 
 ### 3.2 Why Three Verdicts, Not Two
 
-Without AMBIGUOUS, the system would force false confidence — approving or rejecting findings it genuinely can't evaluate. AMBIGUOUS says: "Two agents with domain expertise and opposed perspectives cannot resolve this. Here's what each thinks. Here's the specific question that needs human judgment."
+Without AMBIGUOUS, the system would force false confidence — approving or rejecting findings it genuinely can't evaluate. AMBIGUOUS says: _"Two agents with domain expertise and opposed perspectives cannot resolve this. Here's what each thinks. Here's the specific question that needs human judgment."_
 
-Three of 112 findings in our detailed sample were AMBIGUOUS — all product decisions the system correctly identified as outside its competence. The 2.7% escalation rate may be the right number, not a number to minimize.
+Three of 112 findings in our detailed sample were AMBIGUOUS — all product decisions the system correctly identified as outside its competence. **The 2.7% escalation rate may be _the right number_, not a number to minimize.**
 
 ### 3.3 Transparency Through Invalidation
 
-The final report includes an explicit "Invalidated Findings" table showing what was dismissed and why. This is counterintuitive but critical: _showing the system's mistakes builds trust_. When teams see that the validation layer caught false positives with specific evidence, they gain confidence that the remaining findings are real. A system that only shows confirmed findings offers no evidence of its filtering quality.
+The final report includes an explicit "Invalidated Findings" table showing what was dismissed and why. This is counterintuitive but critical: **_showing the system's mistakes builds trust._** When teams see that the validation layer caught false positives with specific evidence, they gain confidence that the remaining findings are real. A system that only shows confirmed findings offers no evidence of its filtering quality.
 
 ---
 
@@ -96,7 +98,7 @@ The final report includes an explicit "Invalidated Findings" table showing what 
 
 A single generalist reviewer analyzing 22 services faces three problems. **Token budget fragmentation** — each service has thousands of lines of domain-specific patterns, and a generalist spends tokens on irrelevant context. **Authority dilution** — an expert in a document management service (GraphQL federation, row-level security, entity relationships) isn't equally expert in a mail service (SMTP, retry logic, queue management). **Red flag deafness** — a specialized reviewer knows to "challenge DataLoader usage and authorization patterns"; a generalist flags generic issues like "missing tests."
 
-Research on multi-agent systems confirms this: agents with genuinely diverse reasoning approaches outperform larger pools of homogeneous agents (Zhao et al., 2024). Twenty-two specialized agents outperform fifty generic ones when each brings structurally different knowledge.
+Research on multi-agent systems confirms this: agents with genuinely diverse reasoning approaches outperform larger pools of homogeneous agents (Zhao et al., 2024). **Twenty-two specialized agents outperform fifty generic ones** when each brings _structurally different_ knowledge.
 
 ### 4.2 The Agent Pair Structure
 
@@ -112,7 +114,7 @@ The system maintains 22 such pairs across GraphQL subgraph services, HTTP servic
 | Observability Reviewer         | Operations         | "Can we debug this in production?"      |
 | Solution Challenger / Defender | Design             | "Is this approach justified?"           |
 
-A finding confirmed by both a service reviewer and the security reviewer independently carries significantly more weight than either alone. This is the Chokepoint Tripwire in action — when independent diverse agents converge on the same concern, the signal is far stronger than one agent flagging it three times.
+A finding confirmed by both a service reviewer and the security reviewer independently carries significantly more weight than either alone. This is the _Chokepoint Tripwire_ in action — **when independent diverse agents converge on the same concern, the signal is far stronger than one agent flagging it three times.**
 
 ### 4.3 The Shared Adversarial Preamble
 
@@ -152,7 +154,7 @@ The system automates that mental model construction. Each service reviewer produ
 
 **Pattern alignment.** Explicitly calls out which existing patterns the PR follows ("authorization uses the standard `enforceResourcePermission` pattern") and where it drifts ("uses raw SQL instead of the QueryBuilder pattern established in sibling resolvers"). Drift isn't automatically bad — but it should be conscious and visible.
 
-This is what makes the system useful beyond finding bugs. A tech lead can read the Lead Brief in 30 seconds and know: scope, blast radius, pattern conformance. The validated findings then have context. The AMBIGUOUS escalations have framing. The dual-verdict synthesis (next section) has a foundation.
+This is what makes the system useful beyond finding bugs. **A tech lead can read the Lead Brief in 30 seconds** and know: _scope, blast radius, pattern conformance._ The validated findings then have context. The AMBIGUOUS escalations have framing. The dual-verdict synthesis (next section) has a foundation.
 
 An experienced tech lead reviewing a complex PR implicitly runs this process — skim the code, build a mental model, check for pattern drift, then evaluate implementation. The system formalizes and scales what good reviewers already do in their heads.
 
@@ -160,13 +162,13 @@ An experienced tech lead reviewing a complex PR implicitly runs this process —
 
 ## 6. Dual Verdict: When Correct Code Has the Wrong Foundation
 
-This insight emerged from the review system working well enough to surface a deeper problem: some PRs have flawless code that shouldn't have been written.
+This insight emerged from the review system working well enough to surface a deeper problem: **some PRs have flawless code that shouldn't have been written.**
 
 ### 6.1 Why One Verdict Is Not Enough
 
 A PR adds per-user rate limiting by creating a new service, modifying the User model, adding three API endpoints, and creating migrations. The code is flawless — proper locks, correct TTL calculations, comprehensive tests. But the system already has a centralized gateway where rate limiting exists for every endpoint. The PR re-implements distributed rate limiting when the problem was already solved at one chokepoint.
 
-The code is correct. The approach is wrong. Traditional review catches the former. The system catches both.
+**The code is correct. The approach is wrong.** Traditional review catches the former. The system catches both.
 
 ### 6.2 Two Independent Verdicts
 
@@ -186,7 +188,7 @@ The combination matrix:
 | AMBIGUOUS     | Any             | NEEDS DISCUSSION                     |
 | NOT_TRIGGERED | Any             | Follows IMPLEMENTATION verdict       |
 
-SOLUTION_FIT=FAIL overrides everything. Perfect code is still rejected if the approach is wrong.
+**SOLUTION_FIT=FAIL overrides everything.** Perfect code is still rejected if the approach is wrong.
 
 ### 6.3 The Challenger/Defender Debate
 
@@ -196,13 +198,13 @@ The **Solution Challenger** strips away the solution to find the original proble
 
 The **Solution Defender** argues why the complexity is justified — correctness, operational safety, data integrity, team considerations. Speculative future requirements are explicitly rejected as weak arguments. If the Defender can't find strong arguments, it says "VERDICT: UNJUSTIFIED."
 
-Research on debate shows both sides systematically believe they won regardless of quality (Castillo et al., 2025). So the system never lets debaters self-judge — a Lead agent synthesizes independently, producing a continuous overbuild score (0.0–1.0) rather than accepting either debater's self-assessment.
+Research on debate shows both sides _systematically believe they won_ regardless of quality (Castillo et al., 2025). So **the system never lets debaters self-judge** — a Lead agent synthesizes independently, producing a continuous overbuild score (0.0–1.0) rather than accepting either debater's self-assessment.
 
 ### 6.4 The Chokepoint Tripwire
 
 Every service reviewer answers a mandatory question: "Is there a single file or function where this entire change could be made instead of across multiple services?"
 
-When multiple independent reviewers name the same chokepoint, the convergence signal is powerful. Three domain experts independently reaching the same structural insight — that's not noise. It feeds directly into the Challenger's analysis and significantly strengthens the case for simplification.
+When multiple independent reviewers name the same chokepoint, the convergence signal is powerful. **Three domain experts independently reaching the same structural insight — that's not noise.** It feeds directly into the Challenger's analysis and significantly strengthens the case for simplification.
 
 ---
 
@@ -210,7 +212,7 @@ When multiple independent reviewers name the same chokepoint, the convergence si
 
 ### 7.1 The Problem with Static Agents
 
-Agent definitions degrade. Services evolve, patterns change, integration points emerge. An agent generated six months ago may flag patterns now accepted or miss new anti-patterns.
+**Agent definitions degrade.** Services evolve, patterns change, integration points emerge. An agent generated six months ago may flag patterns now accepted or miss new anti-patterns.
 
 ### 7.2 How the Loop Works
 
@@ -218,13 +220,13 @@ Agent definitions degrade. Services evolve, patterns change, integration points 
 
 ### 7.3 Safeguards Against Bad Learning
 
-The loop could "learn" bad conventions — accepting sloppy patterns because developers consistently dismiss findings about them. Three safeguards:
+The loop could _"learn" bad conventions_ — accepting sloppy patterns because developers consistently dismiss findings about them. Three safeguards:
 
 **Threshold gating.** Updates need 3+ independent occurrences across different PRs. One developer dismissing a finding doesn't trigger learning.
 
 **Category separation.** Style disagreements and false positives track separately. The system can learn "this team uses camelCase" without learning "skip RLS checks."
 
-**Immutable red flags.** Certain rules — RLS enforcement, authorization checks, tenant isolation — can be marked immutable. The feedback loop cannot propose removing them regardless of pushback frequency.
+**Immutable red flags.** Certain rules — RLS enforcement, authorization checks, tenant isolation — can be marked immutable. **The feedback loop _cannot_ propose removing them regardless of pushback frequency.**
 
 ---
 
@@ -269,7 +271,7 @@ We track four failure modes actively.
 
 **Shared-bias risk.** All agents run on the same base model. Correlated biases could cause both reviewer and dev agent to agree incorrectly. Mitigations: opposed objectives force different reasoning paths; cross-cutting reviewers provide orthogonal perspectives; the architecture supports mixing model families at the validation layer — not yet needed, but designed in.
 
-**Prompt drift.** The feedback loop could embed regressions — removing legitimate red flags because developers keep dismissing them. Mitigations: threshold gating, category separation, tech lead gate, immutable red flags.Human review in place to tackle it
+**Prompt drift.** The feedback loop could embed regressions — removing legitimate red flags because developers keep dismissing them. Mitigations: threshold gating, category separation, tech lead gate, immutable red flags. Human review in place to tackle it.
 
 **The "defense lawyer" problem.** Dev agents could become biased toward INVALID — finding technical justifications to dismiss real findings. Mitigations: INVALID requires specific counter-evidence; the orchestrator monitors INVALID rates per agent; cross-cutting reviewers can't be invalidated by service dev agents.
 
@@ -306,7 +308,7 @@ Single-pass tools miss three classes of error. **False positives from incomplete
 
 ## 13. Conclusion
 
-We built this system because single-pass AI review wasn't trustworthy enough to use. The core insight: a reviewer finding is a hypothesis, not a verdict.
+We built this system because single-pass AI review wasn't trustworthy enough to use. The core insight: **a reviewer finding is a hypothesis, not a verdict.**
 
 **Adversarial validation** — reviewer attacks, dev agent defends, three-verdict taxonomy that's honest about uncertainty. Showing invalidated findings with reasoning builds trust.
 
@@ -318,7 +320,7 @@ We built this system because single-pass AI review wasn't trustworthy enough to 
 
 **Self-improving feedback loops** — developer pushback drives supervised agent evolution, with safeguards against learning bad conventions.
 
-Across 500+ PRs, ~7% false positive rate. The system doesn't eliminate human judgment — it focuses it on the 5–10% of decisions that genuinely require it.
+Across 500+ PRs, ~7% false positive rate. **The system doesn't eliminate human judgment — it focuses it on the 5–10% of decisions that genuinely require it.**
 
 ---
 
