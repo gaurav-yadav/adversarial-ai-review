@@ -116,13 +116,27 @@ A finding confirmed by both a service reviewer and the security reviewer indepen
 
 ### 4.3 The Shared Adversarial Preamble
 
-All reviewer agents inherit from a shared preamble — the "Adversarial Review DNA." It functions like a constitution (Bai et al., 2022): natural-language principles that steer behavior without exhaustive example sets. It encodes:
+All reviewer agents inherit from a shared preamble — the ["Adversarial Review DNA"](./preamble.md). It functions like a constitution (Bai et al., 2022): natural-language principles that steer behavior without exhaustive example sets. The opening line sets the tone:
 
-**A finding quality bar.** Over-trained constitutional models drift toward boilerplate that technically satisfies principles but catches nothing real — what the research calls Goodharting (Bai et al., 2022). The preamble explicitly forbids generic observations: "Consider adding error handling" is not a finding. Every finding must name a specific code path, a specific input condition, and a specific wrong outcome. If the reviewer can't describe the failure scenario, it doesn't have a finding.
+> **Assume the code contains errors.** Not because developers are incompetent, but because all complex work contains errors. Your job is to find them before they escape.
 
-**A five-step reasoning framework.** Understand Before Judging → Steel-Man Then Attack → Explore the Full Space → Follow Chains of Consequence → State Your Strongest Case. The final step is deliberately not self-correction. It tells reviewers to make the most compelling possible case — front-loading evidence, citing specific code paths — because their findings will be adversarially challenged. Correction is the dev agent's job.
+It encodes three critical mechanisms:
+
+**A finding quality bar.** Over-trained constitutional models drift toward boilerplate that technically satisfies principles but catches nothing real — what the research calls Goodharting (Bai et al., 2022). The preamble explicitly forbids generic observations — and draws a hard line between noise and signal:
+
+> - "Consider adding error handling to this function" — not a finding.
+> - "This could be a security concern" — not a finding.
+> - `createObligation` at `obligations.ts:47` will throw when `dueDate` is null because `new Date(null)` returns epoch, and `checkOverdue()` at line 82 compares against `Date.now()`, marking every null-date obligation as overdue on creation. — **this is a finding.**
+
+Every finding must name a specific code path, a specific input condition, and a specific wrong outcome. If the reviewer can't describe the failure scenario, it doesn't have a finding.
+
+**A five-step reasoning framework.** Understand Before Judging → Steel-Man Then Attack → Explore the Full Space → Follow Chains of Consequence → State Your Strongest Case. The final step is deliberately not self-correction — it tells reviewers to make the most compelling possible case, front-loading evidence, because their findings will be adversarially challenged:
+
+> Do NOT soften your findings or hedge preemptively — correction is the dev agent's job, not yours.
 
 **Per-finding confidence calibration.** Research on debate robustness identifies "confidence domination" — an assertive but incorrect agent flipping a correct but uncertain one (Zeng et al., 2025). Each finding carries an explicit confidence signal: HIGH (exact line and trigger condition), MEDIUM (suspicious pattern, needs dev agent context), or LOW (possibly intentional, flagged because the cost of missing it is high). This gives the validation layer calibrated input instead of having to infer confidence from rhetoric.
+
+The full preamble — including epistemic stance, uncertainty handling, TypeScript-specific hard rules, and the complete output format — is available [here](./preamble.md).
 
 ---
 
