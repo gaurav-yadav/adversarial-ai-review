@@ -250,17 +250,72 @@ The loop could _"learn" bad conventions_ — accepting sloppy patterns because d
 
 ## 8. Auto-Generating Agents
 
-Creating 22 agent pairs by hand is labor-intensive. We developed a four-phase framework:
+Creating 22 agent pairs by hand is labor-intensive. **Agents are auto-generated per service** — point the skill at your repo, it scans your stack and produces the full set. ~30 minutes of human tuning per service to add tribal knowledge.
 
-**Phase 1: Service Analysis.** Scan the service directory — dependencies, directory structure, migrations, tests, schemas, config.
+### 8.1 The Generation Pipeline
 
-**Phase 2: Pattern Recognition.** Infer responsibilities, red flags from conventions that could be violated, verification tasks from test infrastructure.
+The system runs a [six-step skill](./SKILL) that takes a repository from zero to a complete adversarial review setup:
 
-**Phase 3: Template Hydration.** Fill reviewer/dev templates with discovered information.
+**Step 1: Analyze the Repository.** Detect language and framework (`package.json` → TypeScript/Express, `go.mod` → Go, `pyproject.toml` → Python, etc.), identify architecture (monorepo vs. single service vs. frontend app), and map every service/module — entry points, route definitions, schemas, dependencies, test infrastructure.
 
-**Phase 4: Human Tuning.** Developers refine generated agents — correcting inferences, adding tribal knowledge, prioritizing red flags.
+**Step 2: Generate the Shared Preamble.** Adapt the [adversarial review DNA](./preamble) to the repo's language. The preamble is a constitution shared by all reviewer agents — epistemic stance, finding quality bar, deep reasoning framework, and per-finding confidence calibration. The key adaptation is language-specific hard rules: TypeScript gets `no any`, `no unsafe as` assertions; Go gets `no unchecked errors`, `no goroutine leaks`; Python gets `no bare except`, `no mutable default arguments`; Rust gets `no .unwrap() in non-test code`. Each rule includes _why it's dangerous_ and _what to write instead_.
 
-A good agent definition is specific (red flags reference file locations), enforceable (verification tasks are executable), contextually dense (400–600 words of domain context), and actionable (every red flag includes a remediation). The auto-generation provides a starting point; Phase 4 is where quality comes from.
+**Step 3: Generate Service-Specific Agent Pairs.** For each service, produce a matched [reviewer](./reviewer-template) and [dev agent](./dev-template). The reviewer gets domain context (what the service does, key dependencies, data model), 4–8 red flags referencing _actual file paths_ found during analysis, verification tasks based on the service's real test infrastructure, and the mandatory chokepoint question. The matching dev agent gets the same domain context from a builder's perspective — standard patterns, test infrastructure, and a done checklist.
+
+**Step 4: Generate Cross-Cutting Specialists.** Select from five specialist templates based on what the repo actually needs: Security Reviewer (always), Architecture Reviewer (3+ modules or API contracts), Impact Reviewer (monorepos or shared libraries), Observability Reviewer (backend services), and Solution Challenger/Defender (complex domains).
+
+**Step 5: Generate the Orchestrator.** Wire everything together — which reviewers cover which services, which dev agents validate which findings, trigger conditions for the Solution Challenger/Defender debate, and the dual-verdict combination matrix.
+
+**Step 6: Summary and Next Steps.** Output the full agent inventory and hand off to Phase 4: human tuning.
+
+### 8.2 Template-Driven Quality
+
+The templates enforce the quality bar mechanically. Every generated reviewer agent must include:
+
+- **Red flags** that reference real files and patterns found during analysis — not generic advice
+- **Verification tasks** that are executable, not vague ("check auth" → "confirm `enforceResourcePermission` is called on every new resolver in `resolvers/index.ts`")
+- **The chokepoint question** — mandatory for every review
+- **PR Story Payload** — structured narrative output, not just a list of findings
+
+Every generated dev agent must include:
+
+- **Standard patterns** documenting how things are actually done in this service
+- **The three-verdict format** (VALID/INVALID/AMBIGUOUS) — no binary approve/reject
+- **Evidence requirements** — INVALID requires specific file:line counter-evidence
+
+### 8.3 Language Adaptation
+
+The preamble template includes hard-rule tables for TypeScript, Go, Python, Rust, Java/Kotlin, and a pattern for inferring rules for other languages. These aren't style preferences — they're the kind of mistakes that move crashes from compile-time to production:
+
+| Language | Example Rule | Why Dangerous | Write Instead |
+|----------|-------------|---------------|---------------|
+| TypeScript | No `any` | Silently disables downstream type checks | `unknown` + narrowing, generics |
+| Go | No unchecked `_` errors | Silent failures in production | Handle every error, wrap with context |
+| Python | No bare `except:` | Swallows errors silently | Catch specific exceptions |
+| Rust | No `.unwrap()` in non-test code | Panics in production | `?` operator, `.expect()` with message |
+
+The skill detects the repo's language and fills in the appropriate rules automatically.
+
+### 8.4 The Human Tuning Phase
+
+Auto-generation provides a starting point. **Phase 4 is where quality comes from.** Budget ~30 minutes per service pair:
+
+1. **Review red flags** — remove generic ones, add domain-specific tribal knowledge
+2. **Verify file references** — confirm all referenced paths are accurate
+3. **Add business context** — include rules that only humans know ("this endpoint is called by the mobile app and _cannot_ change its response shape")
+4. **Prioritize** — mark which red flags are immutable (can never be learned away by the feedback loop)
+5. **Test on a real PR** — run the system on a recent PR and calibrate
+
+A good agent definition is specific (red flags reference file locations), enforceable (verification tasks are executable), contextually dense (400–600 words of domain context), and actionable (every red flag includes a remediation).
+
+### 8.5 Open-Source Templates
+
+The full skill definition and all templates are available:
+
+- **[Skill Definition](./SKILL)** — the complete six-step generation pipeline
+- **[Preamble Template](./preamble)** — adversarial review DNA with language-adaptive hard rules
+- **[Reviewer Template](./reviewer-template)** — service reviewer agent structure
+- **[Dev Template](./dev-template)** — developer validator agent structure
 
 ---
 
